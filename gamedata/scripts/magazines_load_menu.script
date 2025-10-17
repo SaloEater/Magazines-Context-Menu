@@ -1,0 +1,171 @@
+local debug = false
+local is_magazine = magazine_binder.is_magazine
+local load_magazine = magazines.load_magazine
+local get_mag_time = magazines.get_mag_time
+local action_start_magload = magazines.action_start_magload
+local get_magazine_caliber = magazines.get_magazine_caliber
+local fast_load_magazine = magazines.fast_load_magazine
+local action_in_progress = magazines.action_in_progress
+local do_interrupt = magazines.do_interrupt
+local create_time_event = magazines.create_time_event
+local get_config = magazines_mcm.get_config
+local get_mag_data = magazine_binder.get_data
+
+
+modifiers_table = {
+    1, 3, 5, 10, 15 
+}
+
+function dd(...)
+    if debug then
+        local args = { ... }
+        if type(args[1]) == "string" then
+            args[1] = "[Magazines Context Menu] " .. args[1]
+        end
+        printf(unpack(args))
+    end
+end
+
+if not magazines then
+    debug = true
+    dd("magazines module not found | unloading module")
+    return
+end
+
+function has_ammo(magazine)
+    local has_ammo = false
+    local ammo_pool = invert_table(get_magazine_caliber(magazine))
+    function itr(actor, ammo)
+        local ammo_sec = ammo:section()
+        if ammo_pool[ammo_sec] ~= nil then
+            has_ammo = true
+        end
+    end
+    db.actor:iterate_inventory(itr, db.actor)
+    return has_ammo
+end
+
+function name_condition_function(obj, bag, mode)
+    if not is_magazine(obj) then
+        return false
+    end
+    
+    local id = obj:id()
+    local sec = obj:section()
+    local capacity = SYS_GetParam(2, sec, "max_mag_size") or 20
+	local mag_data = get_mag_data(id)
+    return (mag_data and #mag_data.loaded or 0) < capacity and has_ammo(obj)
+end
+
+function name_function(obj, bag, mode)
+    return "st_magazines_load_menu_name"
+end
+
+function action_condition_function(obj, bag, mode)
+    if not is_magazine(obj) then
+        return false
+    end
+
+    return true
+end
+
+function load_ammo(magazine, ammo, behavior, modifier)
+    if action_in_progress() then 
+		do_interrupt()
+		return 
+	end
+    local id = magazine:id()
+    local sec = magazine:section()
+    local max_mag_size = SYS_GetParam(2, sec, "max_mag_size") or 20
+    local capacity = modifier == 0 and max_mag_size or math.min(modifier, max_mag_size)
+	local mag_data = get_mag_data(id)
+    capacity = capacity + (mag_data and #mag_data.loaded or 0)
+    capacity = math.min(capacity, max_mag_size)
+    if behavior == 1 then
+        fast_load_magazine(magazine, ammo)
+    elseif behavior == 2 then
+        fast_load_magazine(magazine, ammo, true)
+    else
+        local delay = get_mag_time(sec, false)
+        magazines.ext_ammo_box = ammo:id()
+        action_start_magload()
+        RemoveTimeEvent("Mag_redux", "load_mag" .. id)
+        create_time_event("Mag_redux", "load_mag" .. id, 0.1, load_magazine, magazine, capacity, delay * 1000)
+    end
+end
+
+function name_with_modifier(sec, modifier)
+    local capacity = SYS_GetParam(2, sec, "max_mag_size") or 20
+    local name =  SYS_GetParam(0, sec, "inv_name")
+    local modifier_str = modifier == 0 and "" or " x" .. math.min(modifier, capacity)
+    return game.translate_string(name) .. modifier_str
+end
+
+function action_function(magazine, bag, mode)
+    if not is_magazine(magazine) then
+        return
+    end
+
+    local behavior = get_config("load_behavior")
+    local ammo_pool = invert_table(get_magazine_caliber(magazine))
+    local context_str = {}
+    local context_action = {}
+    local context_params = {}
+    local added_ammo = {}
+
+    local function itr(actor, ammo)
+        local ammo_sec = ammo:section()
+        if ammo_pool[ammo_sec] ~= nil and not added_ammo[ammo_sec] then
+            local name = name_with_modifier(ammo_sec, 0)
+            table.insert(context_str, name)
+            table.insert(context_action, load_ammo)
+            table.insert(context_params, {magazine, ammo, behavior, 0})
+            for _, modifier in ipairs(modifiers_table) do
+                if modifier > 0 then
+                    name = name_with_modifier(ammo_sec, modifier)
+                    table.insert(context_str, name)
+                    table.insert(context_action, load_ammo)
+                    table.insert(context_params, {magazine, ammo, behavior, modifier})
+                end
+            end
+            added_ammo[ammo_sec] = true
+        end
+    end
+    db.actor:iterate_inventory(itr, db.actor)
+
+    if not fs_gui then
+        fs_gui = utils_ui_custom.UICellPropertiesCustom(load_ammo)
+    end
+    fs_gui:Reset(GetCursorPosition(), context_action, context_str, context_params)
+    ui_inventory.GUI:PlaySND(sound_object([[interface\inv_properties_2]]))
+end
+
+local add_functor = custom_functor_autoinject.add_functor
+add_functor("magazines_load_menu", name_condition_function, name_function, action_condition_function, action_function, false, true)
+
+function on_option_change()
+    modifiers_table = {}
+    local map = {}
+    for opt, _ in pairs(ui_mcm.opt_val) do
+        if opt:find("magazines/load_magazines_menu/preset_value_") == 1 then
+            local index = opt:sub(44)
+            local value = ui_mcm.get(opt, -1)
+            local enabled = ui_mcm.get("magazines/load_magazines_menu/preset_enabled_" .. index, false)
+            if not enabled then
+                value = -1
+            end
+            map[index] = value
+            dd("Loaded preset index: %s with value: %s", index, value)
+            table.insert(modifiers_table, -1)
+        end
+    end
+
+    for i, _ in pairs(modifiers_table) do
+        modifiers_table[i] = map[tostring(i)] or -1
+    end
+end
+
+function on_game_start()
+    RegisterScriptCallback("on_option_change", on_option_change)
+    on_option_change()
+end

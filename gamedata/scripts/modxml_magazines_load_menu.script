@@ -1,0 +1,24 @@
+function on_xml_read()
+    RegisterScriptCallback("on_xml_read", function(xml_file_name, xml_obj)
+        -- XML file i want to change
+        local xml_to_change = [[text\eng\st_magazines_context_menu_generated.xml]]
+
+        -- Check if its the file i want to change
+        if xml_file_name == xml_to_change then
+            local preset_text = game.translate_string("modxml_magazines_load_menu_presets_preset")
+            local enabled_text = game.translate_string("modxml_magazines_load_menu_presets_preset_enabled")
+            for i, _ in pairs(magazines_load_menu.modifiers_table) do
+                local text = [[
+    <string id="ui_mcm_magazines_load_magazines_menu_preset_value_]] .. i .. [[">
+        <text> ]] .. preset_text .. [[ ]] .. i .. [[</text>
+    </string>
+    <string id="ui_mcm_magazines_load_magazines_menu_preset_enabled_]] .. i .. [[">
+        <text> ]] .. enabled_text .. [[ ]] .. i .. [[</text>
+    </string>
+]]
+                xml_obj:insertFromXMLString(text)
+            end
+        end
+    end)
+end
+

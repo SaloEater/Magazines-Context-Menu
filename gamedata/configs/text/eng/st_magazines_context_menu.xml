@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+    <string id="st_magazines_load_menu_name">
+        <text>Load ammo</text>
+    </string>
+    <string id="modxml_magazines_load_menu_presets_preset">
+        <text>Preset</text>
+    </string>
+    <string id="modxml_magazines_load_menu_presets_preset_enabled">
+        <text>Enable Preset</text>
+    </string>
+    <string id="ui_mcm_menu_load_magazines_menu">
+        <text>Context Menu</text>
+    </string>
+</string_table>
