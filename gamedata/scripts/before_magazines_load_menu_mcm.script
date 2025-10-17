@@ -1,3 +1,15 @@
+function on_remove_button(index)
+    return function()
+        table.remove(magazines_load_menu.modifiers_table, index)
+        ui_mcm.reload()
+    end
+end
+
+function on_add_button()
+    table.insert(magazines_load_menu.modifiers_table, 0)
+    ui_mcm.reload()
+end
+
 function get_load_menu()
     local gr = {}
     local modifiers = magazines_load_menu.modifiers_table
@@ -13,9 +25,20 @@ function get_load_menu()
         }
         table.insert(gr, item)
 
-        local check = {id = "preset_enabled_" .. i, type = "check", val = 1, def=modifier >= 0}
-        table.insert(gr, check)
+        local remove_button = {
+            id = "remove_preset_" .. i,
+            type = "button",
+            functor = {on_remove_button(i)},
+        }
+        table.insert(gr, remove_button)
     end
+
+    local add_button = {
+        id = "add_preset",
+        type = "button",
+        functor = {on_add_button},
+    }
+    table.insert(gr, add_button)
 
     local menu = {id = "load_magazines_menu",sh=true,gr=gr}
 
